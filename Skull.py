@@ -1,4 +1,4 @@
-from scapy.all import sniff, IP, TCP, UDP, Ether
+from scapy.all import sniff, IP, IPv6, TCP, UDP, Ether, wrpcap
 from Poto import extract_source_ip, extract_destination_ip, is_tcp_packet, is_udp_packet, is_http_packet, is_icmp_packet, is_dns_packet, extract_source_mac, extract_destination_mac
 from scapy.layers.http import HTTP
 from scapy.layers.inet6 import IPv6
@@ -7,9 +7,7 @@ from Mylogo import logo
 import time
 import sys
 from prettytable import PrettyTable
-import colorama
 from colorama import Fore, Style
-import logging
 
 GREEN = Fore.GREEN
 YELLOW = Fore.YELLOW
@@ -32,47 +30,56 @@ BROWN = '\033[90m'
 
 logo_printed = False
 
-# Configure logging
-logging.basicConfig(filename='packet_log.txt', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# ประกาศรายการสำหรับเก็บแพ็คเก็ต
+packet_list = []
 
-def log_packet(packet):
+# Configuration option to control detailed packet information display
+show_details = True
+
+def save_pcap(packet_list, filename):
+    wrpcap(filename, packet_list)
+    print(f"\033[92mCapture saved to {filename}.\033[0m")
+
+'''def log_packet(packet):
     if IP in packet or IPv6 in packet:
         source_ip = extract_source_ip(packet)
         destination_ip = extract_destination_ip(packet)
-        logging.info(f"Details Packet:")
+        #print(f"Details Packet:")
         current_time = time.strftime("%Y-%m-%d %H:%M:%S")
-        logging.info(f"Time: {current_time}")
-        logging.info(f"Summary: {packet.summary()}")
+        #print(f"Time: {current_time}")
+        #print(f"Summary: {packet.summary()}")
 
         data = []
 
         if IP in packet:
             source_ip = extract_source_ip(packet)
             destination_ip = extract_destination_ip(packet)
-            data.append(["Source IP", f"{source_ip}"])
-            data.append(["Destination IP", f"{destination_ip}"])
+            #data.append(["Source IP", f"{source_ip}"])
+            #data.append(["Destination IP", f"{destination_ip}"])
         elif IPv6 in packet:
             source_ip = extract_source_ip(packet)
             destination_ip = extract_destination_ip(packet)
-            data.append(["Source IPv6", f"{source_ip}"])
-            data.append(["Destination IPv6", f"{destination_ip}"])
+            #data.append(["Source IPv6", f"{source_ip}"])
+            #data.append(["Destination IPv6", f"{destination_ip}"])
         else:
-            data.append([f"No IP find?"])
+            data.append(["No IP find?"])
 
         if Ether in packet:
             source_mac = extract_source_mac(packet)
             destination_mac = extract_destination_mac(packet)
             data.append(["Source MAC Address", f"{source_mac}"])
             data.append(["Destination MAC Address", f"{destination_mac}"])
-
+            
         table.clear_rows()
         for entry in data:
             table.add_row(entry)
 
-        # Log packet details
-        for entry in data:
-            logging.info(f"  {entry[0]}: {entry[1]}")
-
+        # Log packet details if show_details is True
+        if show_details:
+            for entry in data:
+                print(f"  {entry[0]}: {entry[1]}")
+                
+'''
 
 def packet_callback(packet):
     global logo_printed
@@ -113,8 +120,12 @@ def packet_callback(packet):
     print(table)
     time.sleep(0.5)
 
-    # Log packet details
-    log_packet(packet)
+    # Log packet details if show_details is True
+   # if show_details:
+    #    log_packet(packet)
+
+    # เพิ่มแพ็คเก็ตลงในรายการ
+    packet_list.append(packet)
 
     if is_tcp_packet(packet):
         source_ip = extract_source_ip(packet)
@@ -127,6 +138,8 @@ def packet_callback(packet):
         print(f"{RED}TCP Payload (Text):\n{tcp_payload[:500].decode('utf-8', 'ignore')}{RESET}\n")
         payload_hex = ":".join("{:02x}".format(c) for c in tcp_payload)
         print(f"{BROWN}TCP Payload (Hex):\n{payload_hex[:200]}{RESET}\n")
+        payload_ascii = ''.join(chr(c) if 32 <= c <= 126 else '.' for c in tcp_payload)
+        print(f"{MAGENTA}TCP Payload (ASCII):\n{payload_ascii[:200]}{RESET}\n")
 
     elif is_udp_packet(packet):
         source_ip = extract_source_ip(packet)
@@ -136,7 +149,9 @@ def packet_callback(packet):
             udp_payload = bytes(packet[UDP].payload)
         print(f"{RED}UDP Payload (Text):\n{udp_payload[:500].decode('utf-8', 'ignore')}{RESET}\n")
         payload_hex = ":".join("{:02x}".format(c) for c in udp_payload)
-        print(f"{BROWN}UDP Payload (Hex):\n{payload_hex[:200 ]}{RESET}\n")
+        print(f"{BROWN}UDP Payload (Hex):\n{payload_hex[:200]}{RESET}\n")
+        payload_ascii = ''.join(chr(c) if 32 <= c <= 126 else '.' for c in udp_payload)
+        print(f"{MAGENTA}UDP Payload (ASCII):\n{payload_ascii[:200]}{RESET}\n")
 
     elif is_http_packet(packet):
         source_ip = extract_source_ip(packet)
@@ -146,7 +161,9 @@ def packet_callback(packet):
             http_payload = bytes(packet[HTTP].payload)
         print(f"{GREEN}HTTP Payload (Text):\n{http_payload[:500].decode('utf-8', 'ignore')}{RESET}\n")
         payload_hex = ":".join("{:02x}".format(c) for c in http_payload)
-        print(f"{GREEN}HTTP Payload (Hex):\n{payload_hex[:200 ]}{RESET}\n")
+        print(f"{GREEN}HTTP Payload (Hex):\n{payload_hex[:200]}{RESET}\n")
+        payload_ascii = ''.join(chr(c) if 32 <= c <= 126 else '.' for c in http_payload)
+        print(f"{MAGENTA}HTTP Payload (ASCII):\n{payload_ascii[:200]}{RESET}\n")
 
     elif is_icmp_packet(packet):
         source_ip = extract_source_ip(packet)
@@ -162,6 +179,8 @@ def packet_callback(packet):
         print(f"{GREEN}DNS Payload (Text):\n{dns_payload[:500].decode('utf-8', 'ignore')}{RESET}\n")
         payload_hex = ":".join("{:02x}".format(c) for c in dns_payload)
         print(f"{GREEN}DNS Payload (Hex):\n{payload_hex[:200]}{RESET}\n")
+        payload_ascii = ''.join(chr(c) if 32 <= c <= 126 else '.' for c in dns_payload)
+        print(f"{MAGENTA}DNS Payload (ASCII):\n{payload_ascii[:200]}{RESET}\n")
 
     time.sleep(0.5)
 
@@ -190,12 +209,14 @@ def start_stop_capture_with_logging():
             print("\033[92mStopping packet capture.\033[0m")
             break
         elif user_input.lower() == 'save' or user_input == '3':
-            print("\033[92mSaving logged packets to 'packet_log.txt'.\033[0m")
-            logging.shutdown()
+            filename = input("\033[92mEnter the filename for the pcap: \033[0m")
+            print(f"\033[92mSaving captured packets to '{filename}'.\033[0m")
+            save_pcap(packet_list, filename)
             break
         else:
             print("\033[92mInvalid input. Please enter 'start' to begin, 'stop' to stop, or 'save' to save.\033[0m")
     time.sleep(0.5)
+
 
 try:
     user_input = input("\033[92mDo you want to start packet capture? (1: yes / 2: no): \033[0m")
